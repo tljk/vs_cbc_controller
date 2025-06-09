@@ -175,6 +175,11 @@ local function cannonControlLoop()
 
                             yaws[i] = (360 - (math.atan2(rotatedDelta.x, rotatedDelta.z) * 180 / math.pi)) % 360
                             pitches[i] = math.atan2(rotatedDelta.y, math.sqrt(rotatedDelta.x * rotatedDelta.x + rotatedDelta.z * rotatedDelta.z)) * 180 / math.pi
+                        else
+                            yaws = nil
+                            pitches = nil
+                            logging("No valid trajectory found")
+                            break
                         end
                     end
                 end
@@ -198,40 +203,46 @@ local function cannonControlLoop()
                         if result[1] ~= -1 or result[2] ~= -1 or result[3] ~= -1 then
                             pitches[i] = result[2]
                         else
+                            yaws = nil
+                            pitches = nil
                             logging("No valid trajectory found")
+                            break
                         end
                     end
                 end
             end
 
-            for i, position in ipairs(positions) do
-                yaws[i] = yaws[i] + yawDelta
-                pitches[i] = pitches[i] + pitchDelta
-                
-                if pitches[i] > settings.get("PITCH_MAX") then
-                    pitches[i] = settings.get("PITCH_MAX")
-                    logging("Max Pitch reached")
-                elseif pitches[i] < settings.get("PITCH_MIN") then
-                    pitches[i] = settings.get("PITCH_MIN")
-                    logging("Min Pitch reached")
-                end
+            if yaws and pitches then
+                for i, position in ipairs(positions) do
+                    yaws[i] = yaws[i] + yawDelta
+                    pitches[i] = pitches[i] + pitchDelta
+                    
+                    if not (pitches[i] <= settings.get("PITCH_MAX") and pitches[i] >= settings.get("PITCH_MIN")) then
+                        yaws = nil
+                        pitches = nil
+                        logging("Pitch out of range")
+                        break
+                    end
 
-                if yaws[i] > settings.get("YAW_MAX") then
-                    yaws[i] = settings.get("YAW_MAX")
-                    logging("Max Yaw reached")
-                elseif yaws[i] < settings.get("YAW_MIN") then
-                    yaws[i] = settings.get("YAW_MIN")
-                    logging("Min Yaw reached")
+                    if not ((yaws[i] <= settings.get("YAW_MAX") and yaws[i] >= settings.get("YAW_MIN")) or 
+                    (yaws[i] <= settings.get("YAW_MAX") + 360 and yaws[i] >= settings.get("YAW_MIN") + 360)) then
+                        yaws = nil
+                        pitches = nil
+                        logging("Yaw out of range")
+                        break
+                    end
                 end
             end
 
-            targetYaws = yaws
-            targetPitches = pitches
-            if cannon_utils.setYaws then
-                cannon_utils.setYaws(targetYaws)
-            end
-            if cannon_utils.setPitches then
-                cannon_utils.setPitches(targetPitches)
+            if yaws and pitches then
+                targetYaws = yaws
+                targetPitches = pitches
+                if cannon_utils.setYaws then
+                    cannon_utils.setYaws(targetYaws)
+                end
+                if cannon_utils.setPitches then
+                    cannon_utils.setPitches(targetPitches)
+                end
             end
         end
 
